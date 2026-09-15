@@ -13,13 +13,14 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
 
+
 // =====================================================================
 // 🏘️ CONGREGAÇÕES OFICIAIS
 // =====================================================================
 const CONGREGACOES = {
-  jardins:   { nome: 'Jardins',    cor: '#2e7d32', prefixo: 'jrdTer' },
-  belavista: { nome: 'Bela Vista', cor: '#6a1b9a', prefixo: 'bvTer'  },
-  central:   { nome: 'Central',    cor: '#c62828', prefixo: 'ctlTer' }
+  jardins: { nome: 'Jardins', cor: '#2e7d32', prefixo: 'jrdTer' },
+  belavista: { nome: 'Bela Vista', cor: '#6a1b9a', prefixo: 'bvTer' },
+  central: { nome: 'Central', cor: '#c62828', prefixo: 'ctlTer' }
 };
 
 function nomeCongregacao(c) { return CONGREGACOES[c]?.nome || c; }
@@ -27,7 +28,7 @@ function nomeCongregacao(c) { return CONGREGACOES[c]?.nome || c; }
 function congregacaoPorPrefixo(cod) {
   if (!cod) return 'jardins';
   if (cod.startsWith('jrdTer')) return 'jardins';
-  if (cod.startsWith('bvTer'))  return 'belavista';
+  if (cod.startsWith('bvTer')) return 'belavista';
   if (cod.startsWith('ctlTer') || cod.startsWith('ctTer')) return 'central';
   return 'jardins';
 }
@@ -55,7 +56,7 @@ let unsubscribeTerritorios, usuarioAtual;
 let dadosTerritorios = [];
 
 // =====================================================================
-// 🔐 AUTH
+// 🔐 AUTENTICAÇÃO ANÔNIMA
 // =====================================================================
 async function autenticar() {
   try {
@@ -63,6 +64,7 @@ async function autenticar() {
     usuarioAtual = c.user.uid;
     console.log('[Auth] UID:', usuarioAtual);
   } catch (e) {
+    console.error('[Auth] Falha:', e);
     usuarioAtual = 'anon-' + Math.random().toString(36).slice(2, 8);
   }
 }
@@ -76,6 +78,13 @@ function escutarTerritorios() {
     const arr = [];
     snap.forEach(doc => {
       const d = doc.data();
+
+      // ✅ Converte geometry de string JSON de volta para objeto
+      let geom = d.geometry;
+      if (typeof geom === 'string') {
+        try { geom = JSON.parse(geom); } catch (e) { geom = null; }
+      }
+
       arr.push({
         codigo: doc.id,
         congregacao: d.congregacao || congregacaoPorPrefixo(doc.id),
@@ -86,7 +95,7 @@ function escutarTerritorios() {
         coordenada: d.coordenada || null,
         pontos: d.pontos || [],
         ultimaAlteracao: d.ultimaAlteracao || null,
-        _geometry: d.geometry
+        _geometry: geom
       });
     });
 
@@ -98,7 +107,9 @@ function escutarTerritorios() {
     geojsonData = {
       type: 'FeatureCollection',
       features: arr.filter(t => t._geometry).map(t => ({
-        type: 'Feature', geometry: t._geometry, properties: { name: t.codigo }
+        type: 'Feature',
+        geometry: t._geometry,
+        properties: { name: t.codigo }
       }))
     };
 
@@ -108,7 +119,9 @@ function escutarTerritorios() {
       const at = dadosTerritorios.find(t => t.codigo === territorioAtivo.info.codigo);
       if (at) { territorioAtivo.info = at; atualizarPainelComDadosAtuais(); }
     }
-  }, err => console.error('[Sync]', err));
+
+    console.log(`[Sync] ${arr.length} territórios.`);
+  }, err => console.error('[Sync] Erro:', err));
 }
 
 // =====================================================================
@@ -117,32 +130,50 @@ function escutarTerritorios() {
 async function semearFirestore() {
   try {
     const r = await fetch('territorios.geojson');
-    if (!r.ok) throw 0;
+    if (!r.ok) throw new Error('geojson não encontrado (HTTP ' + r.status + ')');
     const g = await r.json();
+    if (!g.features?.length) throw new Error('geojson sem features');
+
     const b = db.batch();
     g.features.forEach(f => {
       const cod = f.properties.name;
       const ref = db.collection('territorios').doc(cod);
+
       b.set(ref, {
-        congregacao: congregacaoPorPrefixo(cod), status: 'Livre',
-        publicador: '', dataSaida: '', dataConclusao: '',
-        coordenada: null, pontos: [], geometry: f.geometry,
+        congregacao: congregacaoPorPrefixo(cod),
+        status: 'Livre',
+        publicador: '',
+        dataSaida: '',
+        dataConclusao: '',
+        coordenada: null,
+        pontos: [],
+        geometry: JSON.stringify(f.geometry),   // ✅ STRING (evita nested arrays)
         ultimaAlteracao: firebase.firestore.FieldValue.serverTimestamp(),
         ultimoUsuario: usuarioAtual
       });
+
       b.set(ref.collection('historico').doc(), {
         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        status: 'Livre', publicador: '', dataSaida: '', dataConclusao: '',
-        operacao: 'criacao', usuario: usuarioAtual
+        status: 'Livre',
+        publicador: '',
+        dataSaida: '',
+        dataConclusao: '',
+        operacao: 'criacao',
+        usuario: usuarioAtual
       });
     });
+
     await b.commit();
-    console.log('[Seed] Firestore semeado.');
-  } catch {
-    alert('Erro ao semear. Coloque territorios.geojson na raiz.');
+    console.log(`[Seed] Firestore semeado com ${g.features.length} territórios.`);
+  } catch (err) {
+    console.error('[Seed] Erro:', err);
+    alert('Erro ao semear: ' + err.message + '\n\nVerifique se territorios.geojson está na raiz.');
   }
 }
 
+// =====================================================================
+// 💾 CACHE LOCAL
+// =====================================================================
 function salvarCacheLocal() {
   localStorage.setItem('hourglass_db', JSON.stringify(
     dadosTerritorios.map(({ _geometry, ...r }) => r)
@@ -156,15 +187,15 @@ function obterEstilo(cod) {
   const it = dadosTerritorios.find(t => t.codigo === cod);
   const s = it?.status || 'Livre';
   switch (s) {
-    case 'Designado':   return { color: '#f57c00', weight: 3, fillColor: '#f57c00', fillOpacity: 0.55 };
+    case 'Designado': return { color: '#f57c00', weight: 3, fillColor: '#f57c00', fillOpacity: 0.55 };
     case 'Trabalhando': return { color: '#fbc02d', weight: 3, fillColor: '#fbc02d', fillOpacity: 0.60 };
-    case 'Concluído':   return { color: '#1976d2', weight: 3, fillColor: '#1976d2', fillOpacity: 0.55 };
-    default:            return { color: '#2e7d32', weight: 3, fillColor: '#2e7d32', fillOpacity: 0.45 };
+    case 'Concluído': return { color: '#1976d2', weight: 3, fillColor: '#1976d2', fillOpacity: 0.55 };
+    default: return { color: '#2e7d32', weight: 3, fillColor: '#2e7d32', fillOpacity: 0.45 };
   }
 }
 
 // =====================================================================
-// 🗺️ RENDERIZAR COM FILTRO ESTRITO
+// 🗺️ RENDERIZAR COM FILTRO ESTRITO POR CONGREGAÇÃO
 // =====================================================================
 function renderizarMapa(autoZoom = true) {
   if (!geojsonData) return;
@@ -178,7 +209,7 @@ function renderizarMapa(autoZoom = true) {
     const it = dadosTerritorios.find(t => t.codigo === f.properties.name);
     if (!it) return false;
     return (cSel === 'TODAS' || it.congregacao === cSel) &&
-           (sSel === 'TODOS' || it.status === sSel);
+      (sSel === 'TODOS' || it.status === sSel);
   });
 
   geojsonLayer = L.geoJSON({ type: 'FeatureCollection', features: fFilt }, {
@@ -195,7 +226,9 @@ function renderizarMapa(autoZoom = true) {
       if (l.feature.properties.name === codAt) {
         l.setStyle({ weight: 5, color: '#FFFFFF', fillOpacity: 0.85 });
         l.bringToFront();
-        camadaDestacada = l; territorioAtivo.layer = l; enc = true;
+        camadaDestacada = l;
+        territorioAtivo.layer = l;
+        enc = true;
       }
     });
     if (!enc) fecharPainel();
@@ -328,20 +361,25 @@ async function alterarStatus(ns) {
 function capturarCoordenadaGPS() {
   if (!territorioAtivo || !navigator.geolocation) return alert('GPS não suportado.');
   const b = document.getElementById('btn-capturar-coord');
-  const o = b.innerText; b.innerText = 'Obtendo...'; b.disabled = true;
+  const o = b.innerText;
+  b.innerText = 'Obtendo...'; b.disabled = true;
+
   navigator.geolocation.getCurrentPosition(async p => {
-    const lat = +p.coords.latitude.toFixed(6), lng = +p.coords.longitude.toFixed(6);
+    const lat = +p.coords.latitude.toFixed(6);
+    const lng = +p.coords.longitude.toFixed(6);
     const pr = Math.round(p.coords.accuracy);
     let d = false;
-    try { d = turf.booleanPointInPolygon(turf.point([lng, lat]), territorioAtivo.layer.feature); } catch(e){}
+    try { d = turf.booleanPointInPolygon(turf.point([lng, lat]), territorioAtivo.layer.feature); } catch (e) { }
     if (!d && !confirm(`⚠️ Fora do polígono.\nLat: ${lat}\nLng: ${lng}\nPrecisão: ±${pr} m\nGravar?`)) {
       b.innerText = o; b.disabled = false; return;
     }
     territorioAtivo.info.coordenada = { lat, lng };
     await gravarTerritorio(territorioAtivo.info, 'coordenada');
     b.innerText = o; b.disabled = false;
-  }, e => { b.innerText = o; b.disabled = false; alert('Erro GPS: ' + e.message); },
-  { enableHighAccuracy: true, timeout: 15000 });
+  }, e => {
+    b.innerText = o; b.disabled = false;
+    alert('Erro GPS: ' + e.message);
+  }, { enableHighAccuracy: true, timeout: 15000 });
 }
 
 function tracarRotaAteCoordenada() {
@@ -382,7 +420,7 @@ function renderizarCoordenadas() {
   dadosTerritorios.filter(t => v.has(t.codigo) && t.coordenada).forEach(t => {
     camadaCoordenadas.addLayer(
       L.marker([t.coordenada.lat, t.coordenada.lng], {
-        icon: L.divIcon({ className: 'marcador-coordenada', html: '📍', iconSize: [26,26], iconAnchor: [13,26] })
+        icon: L.divIcon({ className: 'marcador-coordenada', html: '📍', iconSize: [26, 26], iconAnchor: [13, 26] })
       }).bindPopup(`<b>${t.codigo}</b><br>${t.coordenada.lat}, ${t.coordenada.lng}`)
     );
   });
@@ -393,7 +431,7 @@ function destacarCoordenadaAtiva() {
   const c = territorioAtivo?.info?.coordenada;
   if (!c) return;
   marcadorCoordenadaAtiva = L.marker([c.lat, c.lng], {
-    icon: L.divIcon({ className: 'marcador-coordenada-ativa', html: '🎯', iconSize: [34,34], iconAnchor: [17,34] })
+    icon: L.divIcon({ className: 'marcador-coordenada-ativa', html: '🎯', iconSize: [34, 34], iconAnchor: [17, 34] })
   }).addTo(map).bindPopup(`Coordenada: ${territorioAtivo.info.codigo}`).openPopup();
 }
 
@@ -410,6 +448,7 @@ function alternarModoMarcacao() {
     alert("Toque dentro do território.");
   } else desativarModoMarcacao();
 }
+
 function desativarModoMarcacao() {
   modoMarcacaoAtivo = false;
   document.getElementById('map')?.classList.remove('modo-marcacao-ativo');
@@ -484,7 +523,8 @@ function fecharPainelAdmin() { document.getElementById('painel-admin').classList
 function iniciarNovoTerritorio() {
   fecharPainelAdmin();
   if (modoDesenhoAtivo) return cancelarDesenho();
-  modoDesenhoAtivo = true; pontosDesenho = [];
+  modoDesenhoAtivo = true;
+  pontosDesenho = [];
   document.getElementById('map').style.cursor = 'crosshair';
   document.getElementById('barra-desenho').classList.remove('oculto');
   document.getElementById('desenho-status').innerText = 'Toque no mapa para adicionar vértices...';
@@ -498,7 +538,9 @@ function adicionarPontoDesenho(e) {
     editorPoligono = L.polygon(pontosDesenho.map(p => [p[1], p[0]]), {
       color: '#ff5722', weight: 3, fillOpacity: 0.4, dashArray: '6,6'
     }).addTo(map);
-  } else editorPoligono.setLatLngs(pontosDesenho.map(p => [p[1], p[0]]));
+  } else {
+    editorPoligono.setLatLngs(pontosDesenho.map(p => [p[1], p[0]]));
+  }
   document.getElementById('desenho-status').innerText = `${pontosDesenho.length} vértice(s). Toque em ✅ Salvar.`;
 }
 
@@ -510,31 +552,46 @@ async function finalizarDesenho() {
   const cod = prompt(`Código do novo território (${nomeCongregacao(cVal)}):`, sugerido);
   if (!cod) return;
   if (dadosTerritorios.some(t => t.codigo === cod)) return alert(`Já existe "${cod}".`);
+
   const cFin = congregacaoPorPrefixo(cod);
   const cds = [...pontosDesenho];
   if (JSON.stringify(cds[0]) !== JSON.stringify(cds[cds.length - 1])) cds.push(cds[0]);
+
   try {
     const ref = db.collection('territorios').doc(cod);
+    const geometry = { type: 'Polygon', coordinates: [cds] };
+
     await ref.set({
-      congregacao: cFin, status: 'Livre',
-      publicador: '', dataSaida: '', dataConclusao: '',
-      coordenada: null, pontos: [],
-      geometry: { type: 'Polygon', coordinates: [cds] },
+      congregacao: cFin,
+      status: 'Livre',
+      publicador: '',
+      dataSaida: '',
+      dataConclusao: '',
+      coordenada: null,
+      pontos: [],
+      geometry: JSON.stringify(geometry),   // ✅ STRING
       ultimaAlteracao: firebase.firestore.FieldValue.serverTimestamp(),
       ultimoUsuario: usuarioAtual
     });
+
     await ref.collection('historico').add({
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      status: 'Livre', publicador: '', dataSaida: '', dataConclusao: '',
-      operacao: 'criacao_poligono', usuario: usuarioAtual
+      status: 'Livre',
+      publicador: '',
+      dataSaida: '',
+      dataConclusao: '',
+      operacao: 'criacao_poligono',
+      usuario: usuarioAtual
     });
+
     alert(`✅ ${cod} criado em ${nomeCongregacao(cFin)}.`);
     cancelarDesenho();
   } catch (e) { alert('Erro: ' + e.message); }
 }
 
 function cancelarDesenho() {
-  modoDesenhoAtivo = false; pontosDesenho = [];
+  modoDesenhoAtivo = false;
+  pontosDesenho = [];
   map.off('click', adicionarPontoDesenho);
   if (editorPoligono) { map.removeLayer(editorPoligono); editorPoligono = null; }
   document.getElementById('map').style.cursor = '';
@@ -553,8 +610,14 @@ function editarPoligonoAtivo() {
   const ll = poligonoSendoEditado.getLatLngs()[0];
   const ms = [];
   ll.forEach((p, i) => {
-    const m = L.marker(p, { draggable: true, icon: L.divIcon({ className: 'vertice-editavel', html: '●', iconSize: [16,16] }) }).addTo(map);
-    m.on('drag', e => { ll[i] = e.target.getLatLng(); poligonoSendoEditado.setLatLngs([ll]); });
+    const m = L.marker(p, {
+      draggable: true,
+      icon: L.divIcon({ className: 'vertice-editavel', html: '●', iconSize: [16, 16] })
+    }).addTo(map);
+    m.on('drag', e => {
+      ll[i] = e.target.getLatLng();
+      poligonoSendoEditado.setLatLngs([ll]);
+    });
     ms.push(m);
   });
   poligonoSendoEditado._marcadoresEdicao = ms;
@@ -566,19 +629,27 @@ async function salvarEdicaoPoligono() {
   const ll = poligonoSendoEditado.getLatLngs()[0];
   const cds = ll.map(p => [p.lng, p.lat]);
   if (JSON.stringify(cds[0]) !== JSON.stringify(cds[cds.length - 1])) cds.push(cds[0]);
+
   const cod = territorioAtivo.info.codigo;
+  const geometry = { type: 'Polygon', coordinates: [cds] };
+
   try {
     await db.collection('territorios').doc(cod).update({
-      geometry: { type: 'Polygon', coordinates: [cds] },
+      geometry: JSON.stringify(geometry),   // ✅ STRING
       ultimaAlteracao: firebase.firestore.FieldValue.serverTimestamp(),
       ultimoUsuario: usuarioAtual
     });
+
     await db.collection('territorios').doc(cod).collection('historico').add({
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      status: territorioAtivo.info.status, publicador: territorioAtivo.info.publicador,
-      dataSaida: territorioAtivo.info.dataSaida, dataConclusao: territorioAtivo.info.dataConclusao,
-      operacao: 'edicao_poligono', usuario: usuarioAtual
+      status: territorioAtivo.info.status,
+      publicador: territorioAtivo.info.publicador,
+      dataSaida: territorioAtivo.info.dataSaida,
+      dataConclusao: territorioAtivo.info.dataConclusao,
+      operacao: 'edicao_poligono',
+      usuario: usuarioAtual
     });
+
     alert('✅ Forma atualizada.');
     cancelarEdicaoPoligono();
   } catch (e) { alert('Erro: ' + e.message); }
@@ -599,29 +670,48 @@ function cancelarEdicaoPoligono() {
 // =====================================================================
 async function moverCongregacao() {
   if (!territorioAtivo) return;
-  const at = territorioAtivo.info.congregacao, ca = territorioAtivo.info.codigo;
-  const op = Object.keys(CONGREGACOES).filter(k => k !== at).map(k => `${k} = ${CONGREGACOES[k].nome}`).join('\n');
+  const at = territorioAtivo.info.congregacao;
+  const ca = territorioAtivo.info.codigo;
+  const op = Object.keys(CONGREGACOES)
+    .filter(k => k !== at)
+    .map(k => `${k} = ${CONGREGACOES[k].nome}`)
+    .join('\n');
   const nv = prompt(`Mover "${ca}"?\n\n${op}\n\nChave:`);
   if (!nv || !CONGREGACOES[nv]) return alert('Inválido.');
+
   const nc = proximoCodigo(nv);
   if (!confirm(`Mover para ${nomeCongregacao(nv)}?\n\nNovo código: ${nc}`)) return;
+
   try {
-    const ar = db.collection('territorios').doc(ca), nr = db.collection('territorios').doc(nc);
+    const ar = db.collection('territorios').doc(ca);
+    const nr = db.collection('territorios').doc(nc);
     const d = territorioAtivo.info;
+    const geometry = territorioAtivo.layer.feature.geometry;
+
     await nr.set({
-      congregacao: nv, status: d.status, publicador: d.publicador,
-      dataSaida: d.dataSaida, dataConclusao: d.dataConclusao,
-      coordenada: d.coordenada, pontos: d.pontos,
-      geometry: territorioAtivo.layer.feature.geometry,
+      congregacao: nv,
+      status: d.status,
+      publicador: d.publicador,
+      dataSaida: d.dataSaida,
+      dataConclusao: d.dataConclusao,
+      coordenada: d.coordenada,
+      pontos: d.pontos,
+      geometry: JSON.stringify(geometry),   // ✅ STRING
       ultimaAlteracao: firebase.firestore.FieldValue.serverTimestamp(),
       ultimoUsuario: usuarioAtual
     });
+
     await nr.collection('historico').add({
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      status: d.status, publicador: d.publicador,
-      dataSaida: d.dataSaida, dataConclusao: d.dataConclusao,
-      operacao: 'mudanca_congregacao', usuario: usuarioAtual, codigoAnterior: ca
+      status: d.status,
+      publicador: d.publicador,
+      dataSaida: d.dataSaida,
+      dataConclusao: d.dataConclusao,
+      operacao: 'mudanca_congregacao',
+      usuario: usuarioAtual,
+      codigoAnterior: ca
     });
+
     await ar.delete();
     alert(`✅ Agora é ${nc}.`);
     fecharPainel();
@@ -639,8 +729,12 @@ async function excluirTerritorioAtivo() {
     const r = db.collection('territorios').doc(c);
     await r.collection('historico').add({
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      status: 'EXCLUIDO', publicador: territorioAtivo.info.publicador || '',
-      dataSaida: '', dataConclusao: '', operacao: 'exclusao', usuario: usuarioAtual
+      status: 'EXCLUIDO',
+      publicador: territorioAtivo.info.publicador || '',
+      dataSaida: '',
+      dataConclusao: '',
+      operacao: 'exclusao',
+      usuario: usuarioAtual
     });
     await r.delete();
     alert('Excluído.');
@@ -673,11 +767,11 @@ async function abrirHistoricoGlobal() {
     all.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
     ul.innerHTML = '';
     all.slice(0, 100).forEach(d => {
-      const ts = d.timestamp?.toDate ? d.timestamp.toDate().toLocaleString('pt-BR') : '---';
+      const tst = d.timestamp?.toDate ? d.timestamp.toDate().toLocaleString('pt-BR') : '---';
       const li = document.createElement('li');
       li.innerHTML = `<div><strong>${d.codigo}</strong> · ${d.operacao} · ${d.status}</div>
         <div style="font-size:12px;color:#555;">${d.publicador || 'sem responsável'}</div>
-        <div style="font-size:11px;color:#888;">${ts}</div>`;
+        <div style="font-size:11px;color:#888;">${tst}</div>`;
       ul.appendChild(li);
     });
   } catch { ul.innerHTML = '<li>Erro.</li>'; }
@@ -693,11 +787,11 @@ async function renderizarHistorico(ref) {
     if (s.empty) { ul.innerHTML = '<li>Sem registros.</li>'; return; }
     s.forEach(doc => {
       const d = doc.data();
-      const ts = d.timestamp?.toDate ? d.timestamp.toDate().toLocaleString('pt-BR') : '---';
+      const tst = d.timestamp?.toDate ? d.timestamp.toDate().toLocaleString('pt-BR') : '---';
       const li = document.createElement('li');
       li.innerHTML = `<div><strong>${d.operacao}</strong> · ${d.status}</div>
         <div style="font-size:12px;color:#555;">${d.publicador || 'sem responsável'}</div>
-        <div style="font-size:11px;color:#888;">${ts}</div>`;
+        <div style="font-size:11px;color:#888;">${tst}</div>`;
       ul.appendChild(li);
     });
   } catch { ul.innerHTML = '<li>Erro.</li>'; }
@@ -712,17 +806,20 @@ function estatisticasCongregacoes() {
   fecharPainelAdmin();
   const c = document.getElementById('stats-conteudo');
   const st = {};
-  Object.keys(CONGREGACOES).forEach(k => st[k] = { Livre:0, Designado:0, Trabalhando:0, Concluído:0, total:0 });
+  Object.keys(CONGREGACOES).forEach(k => st[k] = { Livre: 0, Designado: 0, Trabalhando: 0, Concluído: 0, total: 0 });
   dadosTerritorios.forEach(t => {
     const s = st[t.congregacao]; if (!s) return;
-    s[t.status] = (s[t.status] || 0) + 1; s.total++;
+    s[t.status] = (s[t.status] || 0) + 1;
+    s.total++;
   });
   let h = '<table style="width:100%;border-collapse:collapse;">';
   h += '<tr style="background:#f5f5f5;"><th style="padding:8px;text-align:left;">Congregação</th><th>🟢</th><th>🟠</th><th>🟡</th><th>🔵</th><th>Total</th></tr>';
   Object.entries(st).forEach(([k, v]) => {
     h += `<tr><td style="padding:8px;font-weight:bold;">${CONGREGACOES[k].nome}<br><small style="color:#777;">${CONGREGACOES[k].prefixo}XXX</small></td>
-      <td style="text-align:center;">${v.Livre}</td><td style="text-align:center;">${v.Designado}</td>
-      <td style="text-align:center;">${v.Trabalhando}</td><td style="text-align:center;">${v.Concluído}</td>
+      <td style="text-align:center;">${v.Livre}</td>
+      <td style="text-align:center;">${v.Designado}</td>
+      <td style="text-align:center;">${v.Trabalhando}</td>
+      <td style="text-align:center;">${v.Concluído}</td>
       <td style="text-align:center;font-weight:bold;">${v.total}</td></tr>`;
   });
   h += '</table>';
@@ -737,30 +834,215 @@ function fecharStats() { document.getElementById('modal-stats').classList.add('o
 function importarGeojsonManual() {
   fecharPainelAdmin();
   const i = document.createElement('input');
-  i.type = 'file'; i.accept = '.geojson,.json';
+  i.type = 'file';
+  i.accept = '.geojson,.json';
+
   i.onchange = async e => {
-    const f = e.target.files[0]; if (!f) return;
+    const f = e.target.files[0];
+    if (!f) return;
+
     try {
-      const g = JSON.parse(await f.text());
+      const texto = await f.text();
+      const g = JSON.parse(texto);
+      if (!g.features?.length) return alert('Arquivo sem features.');
+
       const b = db.batch();
       let c = 0;
+
       g.features.forEach(ft => {
-        const cod = ft.properties?.name; if (!cod) return;
-        const r = db.collection('territorios').doc(cod);
-        b.set(r, {
-          congregacao: congregacaoPorPrefixo(cod), status: 'Livre',
-          publicador: '', dataSaida: '', dataConclusao: '',
-          coordenada: null, pontos: [], geometry: ft.geometry,
+        const cod = ft.properties?.name;
+        if (!cod) return;
+
+        const ref = db.collection('territorios').doc(cod);
+
+        b.set(ref, {
+          congregacao: congregacaoPorPrefixo(cod),
+          status: 'Livre',
+          publicador: '',
+          dataSaida: '',
+          dataConclusao: '',
+          coordenada: null,
+          pontos: [],
+          geometry: JSON.stringify(ft.geometry),   // ✅ STRING (evita nested arrays)
           ultimaAlteracao: firebase.firestore.FieldValue.serverTimestamp(),
           ultimoUsuario: usuarioAtual
         }, { merge: true });
+
+        b.set(ref.collection('historico').doc(), {
+          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          status: 'Livre',
+          publicador: '',
+          dataSaida: '',
+          dataConclusao: '',
+          operacao: 'importacao_geojson',
+          usuario: usuarioAtual
+        });
+
         c++;
       });
+
       await b.commit();
-      alert(`✅ ${c} importados.`);
-    } catch (e) { alert('Erro: ' + e.message); }
+      alert(`✅ ${c} territórios importados.`);
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao importar: ' + e.message);
+    }
   };
   i.click();
+}
+
+// =====================================================================
+// 📥 IMPORTAR KML (Google My Maps / Google Earth)
+// =====================================================================
+function importarKML() {
+  fecharPainelAdmin();
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.kml,application/vnd.google-earth.kml+xml';
+
+  input.onchange = async (e) => {
+    const arquivo = e.target.files[0];
+    if (!arquivo) return;
+
+    const texto = await arquivo.text();
+    let placemarks;
+
+    try {
+      placemarks = extrairPlacemarksDoKML(texto);
+    } catch (err) {
+      return alert('❌ Erro ao ler KML: ' + err.message);
+    }
+
+    if (placemarks.length === 0) {
+      return alert('❌ Nenhum polígono encontrado no KML.\n\nUse um arquivo que contenha pelo menos um <Placemark> com <Polygon>.');
+    }
+
+    const duplicados = placemarks.filter(p => dadosTerritorios.some(t => t.codigo === p.nome));
+    let acao = 'substituir';
+
+    if (duplicados.length > 0) {
+      const resposta = prompt(
+        `⚠️ ${duplicados.length} território(s) já existem:\n` +
+        duplicados.map(p => `  • ${p.nome}`).join('\n') +
+        `\n\nDigite:\n  S → Substituir\n  R → Renomear automaticamente\n  C → Cancelar`,
+        'S'
+      );
+      if (!resposta) return;
+      const letra = resposta.trim().toUpperCase();
+      if (letra === 'C') return;
+      if (letra === 'R') acao = 'renomear';
+    }
+
+    const codigosExistentes = new Set(dadosTerritorios.map(t => t.codigo));
+    placemarks.forEach(p => {
+      if (codigosExistentes.has(p.nome) && acao === 'renomear') {
+        const cong = congregacaoPorPrefixo(p.nome);
+        p.nome = proximoCodigo(cong);
+      }
+      codigosExistentes.add(p.nome);
+    });
+
+    const batch = db.batch();
+    let importados = 0;
+
+    placemarks.forEach(p => {
+      const cong = congregacaoPorPrefixo(p.nome);
+      const ref = db.collection('territorios').doc(p.nome);
+
+      batch.set(ref, {
+        congregacao: cong,
+        status: 'Livre',
+        publicador: '',
+        dataSaida: '',
+        dataConclusao: '',
+        coordenada: null,
+        pontos: [],
+        geometry: JSON.stringify(p.geometry),   // ✅ STRING (evita nested arrays)
+        ultimaAlteracao: firebase.firestore.FieldValue.serverTimestamp(),
+        ultimoUsuario: usuarioAtual
+      }, { merge: acao === 'substituir' });
+
+      batch.set(ref.collection('historico').doc(), {
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        status: 'Livre',
+        publicador: '',
+        dataSaida: '',
+        dataConclusao: '',
+        operacao: 'importacao_kml',
+        usuario: usuarioAtual,
+        nomeOriginal: p.nomeOriginal || p.nome
+      });
+
+      importados++;
+    });
+
+    try {
+      await batch.commit();
+      alert(`✅ ${importados} território(s) importado(s) do KML!\n\n` +
+        placemarks.map(p => `  • ${p.nome} → ${nomeCongregacao(congregacaoPorPrefixo(p.nome))}`).join('\n'));
+    } catch (err) {
+      console.error(err);
+      alert('❌ Erro ao gravar no Firestore: ' + err.message);
+    }
+  };
+
+  input.click();
+}
+
+function extrairPlacemarksDoKML(textoKML) {
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(textoKML, 'application/xml');
+
+  const erroParser = xml.querySelector('parsererror');
+  if (erroParser) throw new Error('Arquivo KML inválido ou corrompido.');
+
+  const placemarks = [];
+  const nodes = xml.getElementsByTagName('Placemark');
+
+  for (let i = 0; i < nodes.length; i++) {
+    const pm = nodes[i];
+
+    const nameNode = pm.getElementsByTagName('name')[0];
+    const nomeOriginal = nameNode ? nameNode.textContent.trim() : `territorio_${i + 1}`;
+    const nome = nomeOriginal.replace(/\s+/g, '_').replace(/[^\w\-]/g, '');
+
+    const polygonNodes = pm.getElementsByTagName('Polygon');
+    if (polygonNodes.length === 0) continue;
+
+    const polygon = polygonNodes[0];
+    const aneis = [];
+
+    const outer = polygon.getElementsByTagName('outerBoundaryIs')[0];
+    if (outer) {
+      const outerCoords = outer.getElementsByTagName('coordinates')[0];
+      if (outerCoords) aneis.push(parseCoordenadasKML(outerCoords.textContent));
+    }
+
+    const inners = polygon.getElementsByTagName('innerBoundaryIs');
+    for (let j = 0; j < inners.length; j++) {
+      const c = inners[j].getElementsByTagName('coordinates')[0];
+      if (c) aneis.push(parseCoordenadasKML(c.textContent));
+    }
+
+    if (aneis.length === 0) continue;
+
+    placemarks.push({
+      nome,
+      nomeOriginal,
+      geometry: { type: 'Polygon', coordinates: aneis }
+    });
+  }
+
+  return placemarks;
+}
+
+function parseCoordenadasKML(texto) {
+  return texto.trim().split(/\s+/)
+    .map(par => par.split(','))
+    .filter(p => p.length >= 2)
+    .map(p => [parseFloat(p[0]), parseFloat(p[1])])
+    .filter(p => !isNaN(p[0]) && !isNaN(p[1]));
 }
 
 // =====================================================================
@@ -782,12 +1064,15 @@ function ativarGPS() {
   b.innerText = "⏳";
   navigator.geolocation.watchPosition(p => {
     coordenadasGPS = { lat: p.coords.latitude, lng: p.coords.longitude };
-    b.innerText = "📍"; b.style.background = "#0F9D58";
+    b.innerText = "📍";
+    b.style.background = "#0F9D58";
     if (!marcadorGPS) {
       marcadorGPS = L.circleMarker([coordenadasGPS.lat, coordenadasGPS.lng], {
         radius: 8, color: '#fff', weight: 2, fillColor: '#1976d2', fillOpacity: 1
       }).addTo(map).bindPopup('Você está aqui');
-    } else marcadorGPS.setLatLng([coordenadasGPS.lat, coordenadasGPS.lng]);
+    } else {
+      marcadorGPS.setLatLng([coordenadasGPS.lat, coordenadasGPS.lng]);
+    }
   }, () => { b.innerText = "📍"; alert('Erro GPS.'); }, { enableHighAccuracy: true });
 }
 

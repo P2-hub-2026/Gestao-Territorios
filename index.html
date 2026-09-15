@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Gestão Territorial - 3 Congregações</title>
+  <title>Gestão Territórios</title>
 
   <script src="https://www.gstatic.com/firebasejs/9.14.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.14.0/firebase-firestore-compat.js"></script>
@@ -13,6 +14,7 @@
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
 </head>
+
 <body>
 
   <header id="top-bar">
@@ -115,6 +117,10 @@
         ➕ <strong>Novo Território</strong><br>
         <small>Desenhe um polígono novo no mapa</small>
       </button>
+      <button onclick="importarKML()" class="btn-admin">
+        📥 <strong>Importar KML</strong><br>
+        <small>Adicionar território exportado do Google My Maps</small>
+      </button>
       <button onclick="importarGeojsonManual()" class="btn-admin">
         📥 <strong>Importar GeoJSON</strong><br>
         <small>Enviar arquivo .geojson ou .json</small>
@@ -154,4 +160,5 @@
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
   <script src="app.js"></script>
 </body>
+
 </html>

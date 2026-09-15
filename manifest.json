@@ -1,6 +1,6 @@
 {
-  "name": "Gestão de Territórios",
-  "short_name": "Territórios",
+  "name": "Gestão Territórios",
+  "short_name": "Gestão",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ffffff",
