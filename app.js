@@ -2,12 +2,12 @@
 // 🔥 FIREBASE — SUBSTITUA PELAS SUAS CREDENCIAIS
 // =====================================================================
 const firebaseConfig = {
-  apiKey: "SUA_API_KEY",
-  authDomain: "SEU_PROJETO.firebaseapp.com",
-  projectId: "SEU_PROJETO_ID",
-  storageBucket: "SEU_PROJETO.appspot.com",
-  messagingSenderId: "SEU_SENDER_ID",
-  appId: "SEU_APP_ID"
+  apiKey: "AIzaSyA2zmpdXLDvwC6pjjTEz17pum6q9YWaSp4",
+  authDomain: "gestao-territorio.firebaseapp.com",
+  projectId: "gestao-territorio",
+  storageBucket: "gestao-territorio.firebasestorage.app",
+  messagingSenderId: "412026583803",
+  appId: "1:412026583803:web:9cd3890ccd86126f2ace5e"
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
