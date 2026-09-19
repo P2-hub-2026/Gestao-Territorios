@@ -1,5 +1,5 @@
 // =====================================================================
-// 🔥 FIREBASE — SUBSTITUA PELAS SUAS CREDENCIAIS
+// 🔥 FIREBASE
 // =====================================================================
 const firebaseConfig = {
   apiKey: "AIzaSyA2zmpdXLDvwC6pjjTEz17pum6q9YWaSp4",
@@ -13,14 +13,13 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
 
-
 // =====================================================================
-// 🏘️ CONGREGAÇÕES OFICIAIS
+// 🏘️ CONGREGAÇÕES
 // =====================================================================
 const CONGREGACOES = {
-  jardins: { nome: 'Jardins', cor: '#2e7d32', prefixo: 'jrdTer' },
-  belavista: { nome: 'Bela Vista', cor: '#6a1b9a', prefixo: 'bvTer' },
-  central: { nome: 'Central', cor: '#c62828', prefixo: 'ctlTer' }
+  jardins:   { nome: 'Jardins',    cor: '#2e7d32', prefixo: 'jrdTer' },
+  belavista: { nome: 'Bela Vista', cor: '#6a1b9a', prefixo: 'bvTer'  },
+  central:   { nome: 'Central',    cor: '#c62828', prefixo: 'ctlTer' }
 };
 
 function nomeCongregacao(c) { return CONGREGACOES[c]?.nome || c; }
@@ -28,7 +27,7 @@ function nomeCongregacao(c) { return CONGREGACOES[c]?.nome || c; }
 function congregacaoPorPrefixo(cod) {
   if (!cod) return 'jardins';
   if (cod.startsWith('jrdTer')) return 'jardins';
-  if (cod.startsWith('bvTer')) return 'belavista';
+  if (cod.startsWith('bvTer'))  return 'belavista';
   if (cod.startsWith('ctlTer') || cod.startsWith('ctTer')) return 'central';
   return 'jardins';
 }
@@ -56,7 +55,7 @@ let unsubscribeTerritorios, usuarioAtual;
 let dadosTerritorios = [];
 
 // =====================================================================
-// 🔐 AUTENTICAÇÃO ANÔNIMA
+// 🔐 AUTENTICAÇÃO
 // =====================================================================
 async function autenticar() {
   try {
@@ -78,13 +77,10 @@ function escutarTerritorios() {
     const arr = [];
     snap.forEach(doc => {
       const d = doc.data();
-
-      // ✅ Converte geometry de string JSON de volta para objeto
       let geom = d.geometry;
       if (typeof geom === 'string') {
         try { geom = JSON.parse(geom); } catch (e) { geom = null; }
       }
-
       arr.push({
         codigo: doc.id,
         congregacao: d.congregacao || congregacaoPorPrefixo(doc.id),
@@ -117,7 +113,12 @@ function escutarTerritorios() {
 
     if (territorioAtivo) {
       const at = dadosTerritorios.find(t => t.codigo === territorioAtivo.info.codigo);
-      if (at) { territorioAtivo.info = at; atualizarPainelComDadosAtuais(); }
+      if (at) {
+        territorioAtivo.info = at;
+        atualizarBottomSheet(at);
+        atualizarFichaCompleta(at);
+        atualizarListaPontosDOM();
+      }
     }
 
     console.log(`[Sync] ${arr.length} territórios.`);
@@ -147,7 +148,7 @@ async function semearFirestore() {
         dataConclusao: '',
         coordenada: null,
         pontos: [],
-        geometry: JSON.stringify(f.geometry),   // ✅ STRING (evita nested arrays)
+        geometry: JSON.stringify(f.geometry),
         ultimaAlteracao: firebase.firestore.FieldValue.serverTimestamp(),
         ultimoUsuario: usuarioAtual
       });
@@ -187,15 +188,15 @@ function obterEstilo(cod) {
   const it = dadosTerritorios.find(t => t.codigo === cod);
   const s = it?.status || 'Livre';
   switch (s) {
-    case 'Designado': return { color: '#f57c00', weight: 3, fillColor: '#f57c00', fillOpacity: 0.55 };
+    case 'Designado':   return { color: '#f57c00', weight: 3, fillColor: '#f57c00', fillOpacity: 0.55 };
     case 'Trabalhando': return { color: '#fbc02d', weight: 3, fillColor: '#fbc02d', fillOpacity: 0.60 };
-    case 'Concluído': return { color: '#1976d2', weight: 3, fillColor: '#1976d2', fillOpacity: 0.55 };
-    default: return { color: '#2e7d32', weight: 3, fillColor: '#2e7d32', fillOpacity: 0.45 };
+    case 'Concluído':   return { color: '#1976d2', weight: 3, fillColor: '#1976d2', fillOpacity: 0.55 };
+    default:            return { color: '#2e7d32', weight: 3, fillColor: '#2e7d32', fillOpacity: 0.45 };
   }
 }
 
 // =====================================================================
-// 🗺️ RENDERIZAR COM FILTRO ESTRITO POR CONGREGAÇÃO
+// 🗺️ RENDERIZAR
 // =====================================================================
 function renderizarMapa(autoZoom = true) {
   if (!geojsonData) return;
@@ -209,7 +210,7 @@ function renderizarMapa(autoZoom = true) {
     const it = dadosTerritorios.find(t => t.codigo === f.properties.name);
     if (!it) return false;
     return (cSel === 'TODAS' || it.congregacao === cSel) &&
-      (sSel === 'TODOS' || it.status === sSel);
+           (sSel === 'TODOS' || it.status === sSel);
   });
 
   geojsonLayer = L.geoJSON({ type: 'FeatureCollection', features: fFilt }, {
@@ -254,50 +255,113 @@ function atualizarContador(total, cSel, sSel) {
 }
 
 // =====================================================================
-// 🧭 PAINEL
+// 🧭 BOTTOM SHEET + FICHA + MENU
 // =====================================================================
 function abrirPainel(cod, l) {
   if (modoMarcacaoAtivo || modoDesenhoAtivo || modoEdicaoAtivo) return;
   const it = dadosTerritorios.find(t => t.codigo === cod);
   if (!it) return;
+
   if (camadaDestacada && geojsonLayer) geojsonLayer.resetStyle(camadaDestacada);
   territorioAtivo = { info: it, layer: l };
   camadaDestacada = l;
+
   l.setStyle({ weight: 5, color: '#FFFFFF', fillOpacity: it.status === 'Livre' ? 0.55 : 0.85 });
   l.bringToFront();
-  map.fitBounds(l.getBounds(), { padding: [50, 50], maxZoom: 17 });
-  atualizarPainelComDadosAtuais();
-  document.getElementById('painel-detalhes').classList.remove('oculto');
-}
 
-function atualizarPainelComDadosAtuais() {
-  if (!territorioAtivo) return;
-  const it = territorioAtivo.info;
-  document.getElementById('detalhe-codigo').innerText = it.codigo;
-  document.getElementById('detalhe-congregacao').innerText = nomeCongregacao(it.congregacao);
-  document.getElementById('detalhe-publicador').innerText = it.publicador || 'Ninguém designado';
-  document.getElementById('detalhe-saida').innerText = it.dataSaida || '--/--/----';
-  document.getElementById('detalhe-conclusao').innerText = it.dataConclusao || '--/--/----';
-  document.getElementById('detalhe-qtd-pontos').innerText = (it.pontos || []).length;
-  const u = it.ultimaAlteracao?.toDate ? it.ultimaAlteracao.toDate().toLocaleString('pt-BR') : '---';
-  document.getElementById('detalhe-ultima-alt').innerText = u;
-  const tag = document.getElementById('detalhe-tag-status');
-  tag.innerText = it.status;
-  tag.className = `badge badge-${it.status.toLowerCase()}`;
-  atualizarInterfaceCoordenada();
+  // ✅ Padding assimétrico para não ficar sob o bottom sheet
+  map.fitBounds(l.getBounds(), {
+    paddingTopLeft: [40, 120],
+    paddingBottomRight: [40, 220],
+    maxZoom: 17
+  });
+
+  atualizarBottomSheet(it);
+  atualizarFichaCompleta(it);
   atualizarListaPontosDOM();
   destacarCoordenadaAtiva();
 
-  // ✅ NOVO: atualiza o chip também
-  atualizarChip(it);
+  document.getElementById('bottom-sheet').classList.remove('oculto');
+}
+
+function atualizarBottomSheet(it) {
+  const codEl = document.getElementById('bs-codigo');
+  if (!codEl) return;
+
+  codEl.innerText = it.codigo;
+  const badge = document.getElementById('bs-badge');
+  badge.innerText = it.status;
+  badge.className = `bs-badge badge-${it.status.toLowerCase()}`;
+
+  document.getElementById('bs-publicador').innerText = it.publicador || 'Ninguém designado';
+  document.getElementById('bs-saida').innerText = it.dataSaida || '--/--/----';
+
+  // Botão Rota
+  const btnRota = document.querySelector('.bs-btn-rota');
+  if (btnRota) {
+    const temCoord = !!it.coordenada;
+    btnRota.disabled = !temCoord;
+    btnRota.style.opacity = temCoord ? '1' : '0.5';
+    btnRota.style.cursor = temCoord ? 'pointer' : 'not-allowed';
+  }
+
+  // Item "Limpar coordenada" no menu
+  const limparItem = document.getElementById('menu-item-limpar-coord');
+  if (limparItem) limparItem.style.display = it.coordenada ? 'flex' : 'none';
+}
+
+function atualizarFichaCompleta(it) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+  set('det-congregacao', nomeCongregacao(it.congregacao));
+  set('det-publicador', it.publicador || 'Ninguém designado');
+  set('det-saida', it.dataSaida || '--/--/----');
+  set('det-conclusao', it.dataConclusao || '--/--/----');
+  set('det-qtd-pontos', (it.pontos || []).length);
+  set('det-coordenada', it.coordenada ? `${it.coordenada.lat}, ${it.coordenada.lng}` : 'Nenhuma');
+  const u = it.ultimaAlteracao?.toDate ? it.ultimaAlteracao.toDate().toLocaleString('pt-BR') : '---';
+  set('det-ultima-alt', u);
+}
+
+function abrirDetalhes() {
+  document.getElementById('painel-detalhes').classList.remove('oculto');
+}
+
+function fecharDetalhes() {
+  document.getElementById('painel-detalhes').classList.add('oculto');
 }
 
 function fecharPainel() {
+  document.getElementById('bottom-sheet').classList.add('oculto');
   document.getElementById('painel-detalhes').classList.add('oculto');
+  fecharMenuFlutuante();
+
   if (camadaDestacada && geojsonLayer) geojsonLayer.resetStyle(camadaDestacada);
-  if (marcadorCoordenadaAtiva) { map.removeLayer(marcadorCoordenadaAtiva); marcadorCoordenadaAtiva = null; }
-  territorioAtivo = null; camadaDestacada = null;
+  if (marcadorCoordenadaAtiva) {
+    map.removeLayer(marcadorCoordenadaAtiva);
+    marcadorCoordenadaAtiva = null;
+  }
+  territorioAtivo = null;
+  camadaDestacada = null;
   desativarModoMarcacao();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ⋮ MENU FLUTUANTE
+// ═══════════════════════════════════════════════════════════════════
+function toggleMenuFlutuante() {
+  const menu = document.getElementById('menu-flutuante');
+  const overlay = document.getElementById('menu-overlay');
+  if (menu.classList.contains('oculto')) {
+    menu.classList.remove('oculto');
+    overlay.classList.remove('oculto');
+  } else {
+    fecharMenuFlutuante();
+  }
+}
+
+function fecharMenuFlutuante() {
+  document.getElementById('menu-flutuante')?.classList.add('oculto');
+  document.getElementById('menu-overlay')?.classList.add('oculto');
 }
 
 // =====================================================================
@@ -362,25 +426,27 @@ async function alterarStatus(ns) {
 // 📍 GPS
 // =====================================================================
 function capturarCoordenadaGPS() {
-  if (!territorioAtivo || !navigator.geolocation) return alert('GPS não suportado.');
-  const b = document.getElementById('btn-capturar-coord');
-  const o = b.innerText;
-  b.innerText = 'Obtendo...'; b.disabled = true;
+  if (!territorioAtivo) return alert('Nenhum território selecionado.');
+  if (!navigator.geolocation) return alert('GPS não suportado.');
 
   navigator.geolocation.getCurrentPosition(async p => {
     const lat = +p.coords.latitude.toFixed(6);
     const lng = +p.coords.longitude.toFixed(6);
     const pr = Math.round(p.coords.accuracy);
+
     let d = false;
-    try { d = turf.booleanPointInPolygon(turf.point([lng, lat]), territorioAtivo.layer.feature); } catch (e) { }
-    if (!d && !confirm(`⚠️ Fora do polígono.\nLat: ${lat}\nLng: ${lng}\nPrecisão: ±${pr} m\nGravar?`)) {
-      b.innerText = o; b.disabled = false; return;
-    }
+    try {
+      d = turf.booleanPointInPolygon(turf.point([lng, lat]), territorioAtivo.layer.feature);
+    } catch (e) {}
+
+    if (!d && !confirm(
+      `⚠️ Você está fora do polígono.\n\nLat: ${lat}\nLng: ${lng}\nPrecisão: ±${pr} m\n\nGravar mesmo assim?`
+    )) return;
+
     territorioAtivo.info.coordenada = { lat, lng };
     await gravarTerritorio(territorioAtivo.info, 'coordenada');
-    b.innerText = o; b.disabled = false;
+    alert(`✅ Coordenada salva!\nLat: ${lat}\nLng: ${lng}\nPrecisão: ±${pr} m`);
   }, e => {
-    b.innerText = o; b.disabled = false;
     alert('Erro GPS: ' + e.message);
   }, { enableHighAccuracy: true, timeout: 15000 });
 }
@@ -395,24 +461,19 @@ function tracarRotaAteCoordenada() {
 
 async function limparCoordenada() {
   if (!territorioAtivo?.info?.coordenada) return;
-  if (!confirm('Remover?')) return;
+  if (!confirm('Remover a coordenada marcada?')) return;
   territorioAtivo.info.coordenada = null;
   await gravarTerritorio(territorioAtivo.info, 'coordenada');
 }
 
 function atualizarInterfaceCoordenada() {
-  const c = territorioAtivo?.info?.coordenada;
-  const s = document.getElementById('detalhe-coordenada');
-  const r = document.getElementById('btn-rota-coord');
-  const l = document.getElementById('btn-limpar-coord');
-  if (c) {
-    s.innerText = `${c.lat}, ${c.lng}`; s.style.color = '#2e7d32';
-    if (r) r.disabled = false;
-    if (l) l.style.display = 'inline-block';
-  } else {
-    s.innerText = 'Nenhuma'; s.style.color = '#888';
-    if (r) r.disabled = true;
-    if (l) l.style.display = 'none';
+  const temCoord = !!territorioAtivo?.info?.coordenada;
+  const limparItem = document.getElementById('menu-item-limpar-coord');
+  if (limparItem) limparItem.style.display = temCoord ? 'flex' : 'none';
+  const btnRota = document.querySelector('.bs-btn-rota');
+  if (btnRota) {
+    btnRota.disabled = !temCoord;
+    btnRota.style.opacity = temCoord ? '1' : '0.5';
   }
 }
 
@@ -444,27 +505,34 @@ function destacarCoordenadaAtiva() {
 function alternarModoMarcacao() {
   if (!territorioAtivo) return;
   modoMarcacaoAtivo = !modoMarcacaoAtivo;
-  const b = document.getElementById('btn-add-ponto');
   if (modoMarcacaoAtivo) {
-    b.innerText = "Toque no Mapa..."; b.style.background = "#d32f2f";
     document.getElementById('map').classList.add('modo-marcacao-ativo');
-    alert("Toque dentro do território.");
-  } else desativarModoMarcacao();
+    alert("📍 Toque dentro do território para adicionar uma anotação.");
+  } else {
+    desativarModoMarcacao();
+  }
 }
 
 function desativarModoMarcacao() {
   modoMarcacaoAtivo = false;
   document.getElementById('map')?.classList.remove('modo-marcacao-ativo');
-  const b = document.getElementById('btn-add-ponto');
-  if (b) { b.innerText = "📍 Anotação"; b.style.background = "#673AB7"; }
 }
 
 map.on('click', async e => {
-  if (!modoMarcacaoAtivo || !territorioAtivo) return;
+  // Fecha o menu flutuante se estiver aberto (mas não estava em modo marcação)
+  if (!modoMarcacaoAtivo) {
+    fecharMenuFlutuante();
+    return;
+  }
+
+  if (!territorioAtivo) return;
   const pt = turf.point([e.latlng.lng, e.latlng.lat]);
   if (!territorioAtivo.layer?.feature) { desativarModoMarcacao(); return; }
-  if (!turf.booleanPointInPolygon(pt, territorioAtivo.layer.feature)) return alert("Fora.");
-  const d = prompt("Descrição:");
+  if (!turf.booleanPointInPolygon(pt, territorioAtivo.layer.feature)) {
+    alert("Fora dos limites do território.");
+    return;
+  }
+  const d = prompt("Descrição da anotação:");
   if (!d) { desativarModoMarcacao(); return; }
   if (!territorioAtivo.info.pontos) territorioAtivo.info.pontos = [];
   territorioAtivo.info.pontos.push({
@@ -572,7 +640,7 @@ async function finalizarDesenho() {
       dataConclusao: '',
       coordenada: null,
       pontos: [],
-      geometry: JSON.stringify(geometry),   // ✅ STRING
+      geometry: JSON.stringify(geometry),
       ultimaAlteracao: firebase.firestore.FieldValue.serverTimestamp(),
       ultimoUsuario: usuarioAtual
     });
@@ -606,10 +674,16 @@ function cancelarDesenho() {
 // =====================================================================
 function editarPoligonoAtivo() {
   if (!territorioAtivo?.layer) return;
-  fecharPainel();
+
+  // Fecha UI mas mantém territorioAtivo
+  document.getElementById('bottom-sheet').classList.add('oculto');
+  document.getElementById('painel-detalhes').classList.add('oculto');
+  fecharMenuFlutuante();
+
   modoEdicaoAtivo = true;
   poligonoSendoEditado = territorioAtivo.layer;
   poligonoSendoEditado.setStyle({ color: '#FF5722', weight: 4, dashArray: '6,6' });
+
   const ll = poligonoSendoEditado.getLatLngs()[0];
   const ms = [];
   ll.forEach((p, i) => {
@@ -638,7 +712,7 @@ async function salvarEdicaoPoligono() {
 
   try {
     await db.collection('territorios').doc(cod).update({
-      geometry: JSON.stringify(geometry),   // ✅ STRING
+      geometry: JSON.stringify(geometry),
       ultimaAlteracao: firebase.firestore.FieldValue.serverTimestamp(),
       ultimoUsuario: usuarioAtual
     });
@@ -699,7 +773,7 @@ async function moverCongregacao() {
       dataConclusao: d.dataConclusao,
       coordenada: d.coordenada,
       pontos: d.pontos,
-      geometry: JSON.stringify(geometry),   // ✅ STRING
+      geometry: JSON.stringify(geometry),
       ultimaAlteracao: firebase.firestore.FieldValue.serverTimestamp(),
       ultimoUsuario: usuarioAtual
     });
@@ -843,7 +917,6 @@ function importarGeojsonManual() {
   i.onchange = async e => {
     const f = e.target.files[0];
     if (!f) return;
-
     try {
       const texto = await f.text();
       const g = JSON.parse(texto);
@@ -851,13 +924,10 @@ function importarGeojsonManual() {
 
       const b = db.batch();
       let c = 0;
-
       g.features.forEach(ft => {
         const cod = ft.properties?.name;
         if (!cod) return;
-
         const ref = db.collection('territorios').doc(cod);
-
         b.set(ref, {
           congregacao: congregacaoPorPrefixo(cod),
           status: 'Livre',
@@ -866,11 +936,10 @@ function importarGeojsonManual() {
           dataConclusao: '',
           coordenada: null,
           pontos: [],
-          geometry: JSON.stringify(ft.geometry),   // ✅ STRING (evita nested arrays)
+          geometry: JSON.stringify(ft.geometry),
           ultimaAlteracao: firebase.firestore.FieldValue.serverTimestamp(),
           ultimoUsuario: usuarioAtual
         }, { merge: true });
-
         b.set(ref.collection('historico').doc(), {
           timestamp: firebase.firestore.FieldValue.serverTimestamp(),
           status: 'Livre',
@@ -880,26 +949,20 @@ function importarGeojsonManual() {
           operacao: 'importacao_geojson',
           usuario: usuarioAtual
         });
-
         c++;
       });
-
       await b.commit();
       alert(`✅ ${c} territórios importados.`);
-    } catch (e) {
-      console.error(e);
-      alert('Erro ao importar: ' + e.message);
-    }
+    } catch (e) { alert('Erro ao importar: ' + e.message); }
   };
   i.click();
 }
 
 // =====================================================================
-// 📥 IMPORTAR KML (Google My Maps / Google Earth)
+// 📥 IMPORTAR KML
 // =====================================================================
 function importarKML() {
   fecharPainelAdmin();
-
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.kml,application/vnd.google-earth.kml+xml';
@@ -907,28 +970,22 @@ function importarKML() {
   input.onchange = async (e) => {
     const arquivo = e.target.files[0];
     if (!arquivo) return;
-
     const texto = await arquivo.text();
     let placemarks;
-
-    try {
-      placemarks = extrairPlacemarksDoKML(texto);
-    } catch (err) {
-      return alert('❌ Erro ao ler KML: ' + err.message);
-    }
+    try { placemarks = extrairPlacemarksDoKML(texto); }
+    catch (err) { return alert('❌ Erro ao ler KML: ' + err.message); }
 
     if (placemarks.length === 0) {
-      return alert('❌ Nenhum polígono encontrado no KML.\n\nUse um arquivo que contenha pelo menos um <Placemark> com <Polygon>.');
+      return alert('❌ Nenhum polígono encontrado no KML.');
     }
 
     const duplicados = placemarks.filter(p => dadosTerritorios.some(t => t.codigo === p.nome));
     let acao = 'substituir';
-
     if (duplicados.length > 0) {
       const resposta = prompt(
         `⚠️ ${duplicados.length} território(s) já existem:\n` +
         duplicados.map(p => `  • ${p.nome}`).join('\n') +
-        `\n\nDigite:\n  S → Substituir\n  R → Renomear automaticamente\n  C → Cancelar`,
+        `\n\nDigite:\n  S → Substituir\n  R → Renomear\n  C → Cancelar`,
         'S'
       );
       if (!resposta) return;
@@ -948,11 +1005,9 @@ function importarKML() {
 
     const batch = db.batch();
     let importados = 0;
-
     placemarks.forEach(p => {
       const cong = congregacaoPorPrefixo(p.nome);
       const ref = db.collection('territorios').doc(p.nome);
-
       batch.set(ref, {
         congregacao: cong,
         status: 'Livre',
@@ -961,11 +1016,10 @@ function importarKML() {
         dataConclusao: '',
         coordenada: null,
         pontos: [],
-        geometry: JSON.stringify(p.geometry),   // ✅ STRING (evita nested arrays)
+        geometry: JSON.stringify(p.geometry),
         ultimaAlteracao: firebase.firestore.FieldValue.serverTimestamp(),
         ultimoUsuario: usuarioAtual
       }, { merge: acao === 'substituir' });
-
       batch.set(ref.collection('historico').doc(), {
         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
         status: 'Livre',
@@ -976,36 +1030,31 @@ function importarKML() {
         usuario: usuarioAtual,
         nomeOriginal: p.nomeOriginal || p.nome
       });
-
       importados++;
     });
 
     try {
       await batch.commit();
-      alert(`✅ ${importados} território(s) importado(s) do KML!\n\n` +
-        placemarks.map(p => `  • ${p.nome} → ${nomeCongregacao(congregacaoPorPrefixo(p.nome))}`).join('\n'));
+      alert(`✅ ${importados} território(s) importado(s) do KML!`);
     } catch (err) {
       console.error(err);
-      alert('❌ Erro ao gravar no Firestore: ' + err.message);
+      alert('❌ Erro ao gravar: ' + err.message);
     }
   };
-
   input.click();
 }
 
 function extrairPlacemarksDoKML(textoKML) {
   const parser = new DOMParser();
   const xml = parser.parseFromString(textoKML, 'application/xml');
-
   const erroParser = xml.querySelector('parsererror');
-  if (erroParser) throw new Error('Arquivo KML inválido ou corrompido.');
+  if (erroParser) throw new Error('Arquivo KML inválido.');
 
   const placemarks = [];
   const nodes = xml.getElementsByTagName('Placemark');
 
   for (let i = 0; i < nodes.length; i++) {
     const pm = nodes[i];
-
     const nameNode = pm.getElementsByTagName('name')[0];
     const nomeOriginal = nameNode ? nameNode.textContent.trim() : `territorio_${i + 1}`;
     const nome = nomeOriginal.replace(/\s+/g, '_').replace(/[^\w\-]/g, '');
@@ -1021,22 +1070,18 @@ function extrairPlacemarksDoKML(textoKML) {
       const outerCoords = outer.getElementsByTagName('coordinates')[0];
       if (outerCoords) aneis.push(parseCoordenadasKML(outerCoords.textContent));
     }
-
     const inners = polygon.getElementsByTagName('innerBoundaryIs');
     for (let j = 0; j < inners.length; j++) {
       const c = inners[j].getElementsByTagName('coordinates')[0];
       if (c) aneis.push(parseCoordenadasKML(c.textContent));
     }
-
     if (aneis.length === 0) continue;
 
     placemarks.push({
-      nome,
-      nomeOriginal,
+      nome, nomeOriginal,
       geometry: { type: 'Polygon', coordinates: aneis }
     });
   }
-
   return placemarks;
 }
 
@@ -1092,5 +1137,6 @@ document.addEventListener('keydown', e => {
     if (modoDesenhoAtivo) cancelarDesenho();
     if (modoEdicaoAtivo) cancelarEdicaoPoligono();
     if (modoMarcacaoAtivo) desativarModoMarcacao();
+    fecharMenuFlutuante();
   }
 });

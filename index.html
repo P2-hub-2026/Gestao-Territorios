@@ -15,7 +15,7 @@
 </head>
 <body>
 
-  <!-- ═══════════ BARRA SUPERIOR ═══════════ -->
+  <!-- ══════════ BARRA SUPERIOR ══════════ -->
   <header id="top-bar">
     <select id="filtro-congregacao" onchange="renderizarMapa()">
       <option value="jardins">🏘️ Jardins</option>
@@ -25,7 +25,7 @@
     </select>
 
     <select id="filtro-status" onchange="renderizarMapa()">
-      <option value="TODOS">Todos</option>
+      <option value="TODOS">Todos os status</option>
       <option value="Livre">🟢 Livres</option>
       <option value="Designado">🟠 Designados</option>
       <option value="Trabalhando">🟡 Trabalhando</option>
@@ -37,140 +37,166 @@
     <button id="btn-historico" onclick="abrirHistoricoGlobal()" title="Histórico">📜</button>
   </header>
 
-  <!-- ═══════════ CONTADOR ═══════════ -->
+  <!-- ══════════ CONTADOR ══════════ -->
   <div id="contador-territorios">
     <span id="contador-texto">Carregando...</span>
   </div>
 
-  <!-- ═══════════ MAPA ═══════════ -->
+  <!-- ══════════ MAPA ══════════ -->
   <div id="map"></div>
 
-  <!-- ═══════════ CHIP DO TERRITÓRIO ATIVO ═══════════ -->
-  <div id="chip-territorio" class="chip oculto" onclick="toggleChipExpandido()">
-    <div class="chip-cor" id="chip-cor"></div>
-    <div class="chip-conteudo">
-      <div class="chip-linha-1">
-        <strong id="chip-codigo">---</strong>
-        <span id="chip-badge" class="chip-badge">---</span>
+  <!-- ══════════ BOTTOM SHEET (ficha compacta) ══════════ -->
+  <div id="bottom-sheet" class="bottom-sheet oculto">
+    <div class="bs-handle"></div>
+
+    <div class="bs-header">
+      <div class="bs-titulo">
+        <h2 id="bs-codigo">---</h2>
+        <span id="bs-badge" class="bs-badge">---</span>
       </div>
-      <div class="chip-linha-2">
-        <span id="chip-publicador">Ninguém designado</span>
-      </div>
+      <button class="bs-fechar" onclick="fecharPainel()" aria-label="Fechar">✕</button>
     </div>
-    <div class="chip-seta" id="chip-seta">▲</div>
-  </div>
 
-  <!-- ═══════════ PAINEL EXPANDIDO ═══════════ -->
-  <div id="painel-expandido" class="painel-expandido oculto">
-    <div class="painel-expandido-conteudo">
-      <div class="painel-cabecalho">
-        <h2 id="detalhe-codigo">---</h2>
-        <span id="detalhe-tag-status" class="badge">---</span>
-        <button class="btn-fechar-painel" onclick="fecharPainelExpandido()">✕</button>
-      </div>
+    <div class="bs-info">
+      <span id="bs-publicador">Ninguém designado</span>
+      <span id="bs-saida">--/--/----</span>
+    </div>
 
-      <div class="info-grid">
-        <p><strong>Congregação:</strong> <span id="detalhe-congregacao">---</span></p>
-        <p><strong>Designado a:</strong> <span id="detalhe-publicador">Ninguém</span></p>
-        <p><strong>Data de Saída:</strong> <span id="detalhe-saida">--/--/----</span></p>
-        <p><strong>Última Conclusão:</strong> <span id="detalhe-conclusao">--/--/----</span></p>
-        <p><strong>Anotações:</strong> <span id="detalhe-qtd-pontos">0</span></p>
-        <p><strong>Coordenada:</strong> <span id="detalhe-coordenada">Nenhuma</span></p>
-        <p style="grid-column: span 2;">
-          <strong>Última alteração:</strong> <span id="detalhe-ultima-alt">---</span>
-        </p>
-      </div>
+    <div class="bs-acoes">
+      <button class="bs-btn bs-btn-designar" onclick="acaoDesignar()">
+        <span class="bs-btn-icone">📋</span>
+        <span class="bs-btn-label">Designar</span>
+      </button>
 
-      <hr>
+      <button class="bs-btn bs-btn-campo" onclick="alterarStatus('Trabalhando')">
+        <span class="bs-btn-icone">🚶</span>
+        <span class="bs-btn-label">Em<br>Campo</span>
+      </button>
 
-      <!-- Ações secundárias -->
-      <div class="painel-acoes-secundarias">
-        <button id="btn-capturar-coord" onclick="capturarCoordenadaGPS()">📍 GPS</button>
-        <button id="btn-rota-coord" onclick="tracarRotaAteCoordenada()" disabled>🚗 Rota</button>
-        <button id="btn-limpar-coord" onclick="limparCoordenada()" style="display:none;">🗑️</button>
-        <button id="btn-add-ponto" onclick="alternarModoMarcacao()">📝 Anotar</button>
-      </div>
+      <button class="bs-btn bs-btn-rota" onclick="tracarRotaAteCoordenada()">
+        <span class="bs-btn-icone">🚗</span>
+        <span class="bs-btn-label">Rota</span>
+      </button>
 
-      <div class="painel-acoes-secundarias">
-        <button onclick="editarPoligonoAtivo()">✏️ Editar forma</button>
-        <button onclick="abrirHistoricoTerritorio()">📜 Histórico</button>
-        <button onclick="moverCongregacao()" style="background:#FF9800;">🔀 Mover</button>
-        <button onclick="excluirTerritorioAtivo()" style="background:#c62828;">🗑️ Excluir</button>
-      </div>
-
-      <div id="secao-pontos" class="secao-pontos">
-        <h4>Anotações dentro do Território</h4>
-        <ul id="lista-pontos"></ul>
-      </div>
+      <button class="bs-btn bs-btn-mais" id="btn-mais" onclick="toggleMenuFlutuante()" aria-label="Mais ações">
+        <span class="bs-btn-icone">⋮</span>
+      </button>
     </div>
   </div>
 
-  <!-- ═══════════ SPEED DIAL (FAB) ═══════════ -->
-  <div id="fab-container" class="fab-container oculto">
-    <div id="fab-actions" class="fab-actions">
-      <button class="fab-action" onclick="alterarStatus('Livre'); fecharSpeedDial()" style="--delay: 0ms;">
-        <span class="fab-action-icon">🔄</span>
-        <span class="fab-action-label">Liberar</span>
-      </button>
-      <button class="fab-action" onclick="alterarStatus('Concluído'); fecharSpeedDial()" style="--delay: 50ms;">
-        <span class="fab-action-icon">✅</span>
-        <span class="fab-action-label">Concluir</span>
-      </button>
-      <button class="fab-action" onclick="alterarStatus('Trabalhando'); fecharSpeedDial()" style="--delay: 100ms;">
-        <span class="fab-action-icon">🚶</span>
-        <span class="fab-action-label">Em Campo</span>
-      </button>
-      <button class="fab-action" onclick="acaoDesignar(); fecharSpeedDial()" style="--delay: 150ms;">
-        <span class="fab-action-icon">📋</span>
-        <span class="fab-action-label">Designar</span>
-      </button>
-    </div>
-    <button id="fab-principal" class="fab-principal" onclick="toggleSpeedDial()">
-      <span id="fab-icon">⚡</span>
+  <!-- ══════════ MENU FLUTUANTE (expandido pelo ⋮) ══════════ -->
+  <div id="menu-flutuante" class="menu-flutuante oculto">
+    <button class="menu-item" onclick="abrirDetalhes(); fecharMenuFlutuante()">
+      <span class="menu-item-icone" style="background:#E8EAF6;color:#3949AB;">📄</span>
+      <span class="menu-item-texto">Ver ficha completa</span>
+    </button>
+
+    <div class="menu-divisor"></div>
+
+    <button class="menu-item" onclick="alterarStatus('Concluído'); fecharMenuFlutuante()">
+      <span class="menu-item-icone" style="background:#E3F2FD;color:#1565C0;">✅</span>
+      <span class="menu-item-texto">Concluir território</span>
+    </button>
+
+    <button class="menu-item" onclick="alterarStatus('Livre'); fecharMenuFlutuante()">
+      <span class="menu-item-icone" style="background:#ECEFF1;color:#455A64;">🔄</span>
+      <span class="menu-item-texto">Liberar território</span>
+    </button>
+
+    <div class="menu-divisor"></div>
+
+    <button class="menu-item" onclick="capturarCoordenadaGPS(); fecharMenuFlutuante()">
+      <span class="menu-item-icone" style="background:#E8EAF6;color:#3949AB;">📍</span>
+      <span class="menu-item-texto">Capturar GPS</span>
+    </button>
+
+    <button class="menu-item" id="menu-item-limpar-coord" onclick="limparCoordenada(); fecharMenuFlutuante()" style="display:none;">
+      <span class="menu-item-icone" style="background:#FFEBEE;color:#C62828;">🗑️</span>
+      <span class="menu-item-texto">Limpar coordenada</span>
+    </button>
+
+    <button class="menu-item" onclick="alternarModoMarcacao(); fecharMenuFlutuante()">
+      <span class="menu-item-icone" style="background:#F3E5F5;color:#673AB7;">📝</span>
+      <span class="menu-item-texto">Adicionar anotação</span>
+    </button>
+
+    <button class="menu-item" onclick="editarPoligonoAtivo(); fecharMenuFlutuante()">
+      <span class="menu-item-icone" style="background:#FBE9E7;color:#D84315;">✏️</span>
+      <span class="menu-item-texto">Editar forma</span>
+    </button>
+
+    <div class="menu-divisor"></div>
+
+    <button class="menu-item" onclick="abrirHistoricoTerritorio(); fecharMenuFlutuante()">
+      <span class="menu-item-icone" style="background:#ECEFF1;color:#455A64;">📜</span>
+      <span class="menu-item-texto">Ver histórico</span>
+    </button>
+
+    <button class="menu-item" onclick="moverCongregacao(); fecharMenuFlutuante()">
+      <span class="menu-item-icone" style="background:#FFF3E0;color:#EF6C00;">🔀</span>
+      <span class="menu-item-texto">Mover congregação</span>
+    </button>
+
+    <button class="menu-item menu-item-perigo" onclick="excluirTerritorioAtivo(); fecharMenuFlutuante()">
+      <span class="menu-item-icone" style="background:#FFEBEE;color:#C62828;">🗑️</span>
+      <span class="menu-item-texto">Excluir território</span>
     </button>
   </div>
 
-  <!-- ═══════════ BARRA DE DESENHO ═══════════ -->
+  <div id="menu-overlay" class="menu-overlay oculto" onclick="fecharMenuFlutuante()"></div>
+
+  <!-- ══════════ FICHA COMPLETA ══════════ -->
+  <div id="painel-detalhes" class="painel oculto">
+    <button class="btn-fechar" onclick="fecharDetalhes()">✕</button>
+    <h3 style="margin-bottom:14px;color:#222;">Ficha Completa</h3>
+
+    <div class="info-grid">
+      <p><strong>Congregação:</strong> <span id="det-congregacao">---</span></p>
+      <p><strong>Designado:</strong> <span id="det-publicador">---</span></p>
+      <p><strong>Data de Saída:</strong> <span id="det-saida">--/--/----</span></p>
+      <p><strong>Última Conclusão:</strong> <span id="det-conclusao">--/--/----</span></p>
+      <p><strong>Coordenada:</strong> <span id="det-coordenada">Nenhuma</span></p>
+      <p><strong>Anotações:</strong> <span id="det-qtd-pontos">0</span></p>
+      <p style="grid-column: span 2;"><strong>Última alteração:</strong> <span id="det-ultima-alt">---</span></p>
+    </div>
+
+    <hr>
+
+    <div id="secao-pontos" class="secao-pontos">
+      <h4>Anotações dentro do Território</h4>
+      <ul id="lista-pontos"></ul>
+    </div>
+  </div>
+
+  <!-- ══════════ BARRA DE DESENHO ══════════ -->
   <div id="barra-desenho" class="barra-flutuante oculto">
-    <span id="desenho-status">Adicione pontos no mapa</span>
+    <span id="desenho-status">Toque no mapa para adicionar vértices</span>
     <button onclick="finalizarDesenho()" class="btn-salvar">✅</button>
     <button onclick="cancelarDesenho()" class="btn-cancelar">❌</button>
   </div>
 
-  <!-- ═══════════ BARRA DE EDIÇÃO ═══════════ -->
+  <!-- ══════════ BARRA DE EDIÇÃO ══════════ -->
   <div id="barra-edicao" class="barra-flutuante verde oculto">
     <span>✏️ Arraste os vértices</span>
     <button onclick="salvarEdicaoPoligono()" class="btn-salvar">✅</button>
     <button onclick="cancelarEdicaoPoligono()" class="btn-cancelar">❌</button>
   </div>
 
-  <!-- ═══════════ PAINEL ADMIN ═══════════ -->
+  <!-- ══════════ PAINEL ADMIN ══════════ -->
   <div id="painel-admin" class="painel-admin oculto">
     <button class="btn-fechar" onclick="fecharPainelAdmin()">✕</button>
     <h2>⚙️ Ferramentas</h2>
     <div class="admin-lista">
-      <button onclick="iniciarNovoTerritorio()" class="btn-admin">
-        ➕ <strong>Novo Território</strong><br><small>Desenhe um polígono</small>
-      </button>
-      <button onclick="importarKML()" class="btn-admin">
-        📥 <strong>Importar KML</strong><br><small>Google My Maps</small>
-      </button>
-      <button onclick="importarGeojsonManual()" class="btn-admin">
-        📥 <strong>Importar GeoJSON</strong><br><small>Arquivo .geojson</small>
-      </button>
-      <button onclick="abrirHistoricoGlobal()" class="btn-admin">
-        📜 <strong>Histórico geral</strong>
-      </button>
-      <button onclick="estatisticasCongregacoes()" class="btn-admin">
-        📊 <strong>Estatísticas</strong>
-      </button>
-      <button onclick="recarregarTudo()" class="btn-admin">
-        🔄 <strong>Recarregar dados</strong>
-      </button>
+      <button onclick="iniciarNovoTerritorio()" class="btn-admin">➕ <strong>Novo Território</strong><br><small>Desenhe um polígono</small></button>
+      <button onclick="importarKML()" class="btn-admin">📥 <strong>Importar KML</strong><br><small>Google My Maps</small></button>
+      <button onclick="importarGeojsonManual()" class="btn-admin">📥 <strong>Importar GeoJSON</strong><br><small>Arquivo .geojson</small></button>
+      <button onclick="abrirHistoricoGlobal()" class="btn-admin">📜 <strong>Histórico geral</strong></button>
+      <button onclick="estatisticasCongregacoes()" class="btn-admin">📊 <strong>Estatísticas</strong></button>
+      <button onclick="recarregarTudo()" class="btn-admin">🔄 <strong>Recarregar dados</strong></button>
     </div>
   </div>
 
-  <!-- ═══════════ MODAIS ═══════════ -->
+  <!-- ══════════ MODAIS ══════════ -->
   <div id="modal-historico" class="modal oculto">
     <div class="modal-conteudo">
       <button class="btn-fechar" onclick="fecharHistorico()">✕</button>
