@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -14,132 +13,164 @@
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
 </head>
-
 <body>
 
+  <!-- ═══════════ BARRA SUPERIOR ═══════════ -->
   <header id="top-bar">
     <select id="filtro-congregacao" onchange="renderizarMapa()">
       <option value="jardins">🏘️ Jardins</option>
       <option value="belavista">🌄 Bela Vista</option>
       <option value="central">🏛️ Central</option>
-      <option value="TODAS">🌐 Todas as congregações</option>
+      <option value="TODAS">🌐 Todas</option>
     </select>
 
     <select id="filtro-status" onchange="renderizarMapa()">
-      <option value="TODOS">Todos os status</option>
+      <option value="TODOS">Todos</option>
       <option value="Livre">🟢 Livres</option>
       <option value="Designado">🟠 Designados</option>
       <option value="Trabalhando">🟡 Trabalhando</option>
       <option value="Concluído">🔵 Concluídos</option>
     </select>
 
-    <button id="btn-gps" onclick="ativarGPS()" title="Localização">📍</button>
+    <button id="btn-gps" onclick="ativarGPS()" title="GPS">📍</button>
     <button id="btn-menu-admin" onclick="abrirPainelAdmin()" title="Gestão">⚙️</button>
     <button id="btn-historico" onclick="abrirHistoricoGlobal()" title="Histórico">📜</button>
   </header>
 
+  <!-- ═══════════ CONTADOR ═══════════ -->
   <div id="contador-territorios">
     <span id="contador-texto">Carregando...</span>
   </div>
 
+  <!-- ═══════════ MAPA ═══════════ -->
   <div id="map"></div>
 
+  <!-- ═══════════ CHIP DO TERRITÓRIO ATIVO ═══════════ -->
+  <div id="chip-territorio" class="chip oculto" onclick="toggleChipExpandido()">
+    <div class="chip-cor" id="chip-cor"></div>
+    <div class="chip-conteudo">
+      <div class="chip-linha-1">
+        <strong id="chip-codigo">---</strong>
+        <span id="chip-badge" class="chip-badge">---</span>
+      </div>
+      <div class="chip-linha-2">
+        <span id="chip-publicador">Ninguém designado</span>
+      </div>
+    </div>
+    <div class="chip-seta" id="chip-seta">▲</div>
+  </div>
+
+  <!-- ═══════════ PAINEL EXPANDIDO ═══════════ -->
+  <div id="painel-expandido" class="painel-expandido oculto">
+    <div class="painel-expandido-conteudo">
+      <div class="painel-cabecalho">
+        <h2 id="detalhe-codigo">---</h2>
+        <span id="detalhe-tag-status" class="badge">---</span>
+        <button class="btn-fechar-painel" onclick="fecharPainelExpandido()">✕</button>
+      </div>
+
+      <div class="info-grid">
+        <p><strong>Congregação:</strong> <span id="detalhe-congregacao">---</span></p>
+        <p><strong>Designado a:</strong> <span id="detalhe-publicador">Ninguém</span></p>
+        <p><strong>Data de Saída:</strong> <span id="detalhe-saida">--/--/----</span></p>
+        <p><strong>Última Conclusão:</strong> <span id="detalhe-conclusao">--/--/----</span></p>
+        <p><strong>Anotações:</strong> <span id="detalhe-qtd-pontos">0</span></p>
+        <p><strong>Coordenada:</strong> <span id="detalhe-coordenada">Nenhuma</span></p>
+        <p style="grid-column: span 2;">
+          <strong>Última alteração:</strong> <span id="detalhe-ultima-alt">---</span>
+        </p>
+      </div>
+
+      <hr>
+
+      <!-- Ações secundárias -->
+      <div class="painel-acoes-secundarias">
+        <button id="btn-capturar-coord" onclick="capturarCoordenadaGPS()">📍 GPS</button>
+        <button id="btn-rota-coord" onclick="tracarRotaAteCoordenada()" disabled>🚗 Rota</button>
+        <button id="btn-limpar-coord" onclick="limparCoordenada()" style="display:none;">🗑️</button>
+        <button id="btn-add-ponto" onclick="alternarModoMarcacao()">📝 Anotar</button>
+      </div>
+
+      <div class="painel-acoes-secundarias">
+        <button onclick="editarPoligonoAtivo()">✏️ Editar forma</button>
+        <button onclick="abrirHistoricoTerritorio()">📜 Histórico</button>
+        <button onclick="moverCongregacao()" style="background:#FF9800;">🔀 Mover</button>
+        <button onclick="excluirTerritorioAtivo()" style="background:#c62828;">🗑️ Excluir</button>
+      </div>
+
+      <div id="secao-pontos" class="secao-pontos">
+        <h4>Anotações dentro do Território</h4>
+        <ul id="lista-pontos"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SPEED DIAL (FAB) ═══════════ -->
+  <div id="fab-container" class="fab-container oculto">
+    <div id="fab-actions" class="fab-actions">
+      <button class="fab-action" onclick="alterarStatus('Livre'); fecharSpeedDial()" style="--delay: 0ms;">
+        <span class="fab-action-icon">🔄</span>
+        <span class="fab-action-label">Liberar</span>
+      </button>
+      <button class="fab-action" onclick="alterarStatus('Concluído'); fecharSpeedDial()" style="--delay: 50ms;">
+        <span class="fab-action-icon">✅</span>
+        <span class="fab-action-label">Concluir</span>
+      </button>
+      <button class="fab-action" onclick="alterarStatus('Trabalhando'); fecharSpeedDial()" style="--delay: 100ms;">
+        <span class="fab-action-icon">🚶</span>
+        <span class="fab-action-label">Em Campo</span>
+      </button>
+      <button class="fab-action" onclick="acaoDesignar(); fecharSpeedDial()" style="--delay: 150ms;">
+        <span class="fab-action-icon">📋</span>
+        <span class="fab-action-label">Designar</span>
+      </button>
+    </div>
+    <button id="fab-principal" class="fab-principal" onclick="toggleSpeedDial()">
+      <span id="fab-icon">⚡</span>
+    </button>
+  </div>
+
+  <!-- ═══════════ BARRA DE DESENHO ═══════════ -->
   <div id="barra-desenho" class="barra-flutuante oculto">
     <span id="desenho-status">Adicione pontos no mapa</span>
-    <button onclick="finalizarDesenho()" class="btn-salvar">✅ Salvar</button>
-    <button onclick="cancelarDesenho()" class="btn-cancelar">❌ Cancelar</button>
+    <button onclick="finalizarDesenho()" class="btn-salvar">✅</button>
+    <button onclick="cancelarDesenho()" class="btn-cancelar">❌</button>
   </div>
 
+  <!-- ═══════════ BARRA DE EDIÇÃO ═══════════ -->
   <div id="barra-edicao" class="barra-flutuante verde oculto">
-    <span>✏️ Editando polígono — arraste os vértices</span>
-    <button onclick="salvarEdicaoPoligono()" class="btn-salvar">✅ Salvar</button>
-    <button onclick="cancelarEdicaoPoligono()" class="btn-cancelar">❌ Cancelar</button>
+    <span>✏️ Arraste os vértices</span>
+    <button onclick="salvarEdicaoPoligono()" class="btn-salvar">✅</button>
+    <button onclick="cancelarEdicaoPoligono()" class="btn-cancelar">❌</button>
   </div>
 
-  <div id="painel-detalhes" class="painel oculto">
-    <button class="btn-fechar" onclick="fecharPainel()">✕</button>
-
-    <div class="painel-cabecalho">
-      <h2 id="detalhe-codigo">---</h2>
-      <span id="detalhe-tag-status" class="badge">---</span>
-    </div>
-
-    <div class="info-grid">
-      <p><strong>Congregação:</strong> <span id="detalhe-congregacao">---</span></p>
-      <p><strong>Designado a:</strong> <span id="detalhe-publicador">Ninguém</span></p>
-      <p><strong>Data de Saída:</strong> <span id="detalhe-saida">--/--/----</span></p>
-      <p><strong>Última Conclusão:</strong> <span id="detalhe-conclusao">--/--/----</span></p>
-      <p><strong>Anotações:</strong> <span id="detalhe-qtd-pontos">0</span></p>
-      <p><strong>Coordenada:</strong> <span id="detalhe-coordenada">Nenhuma</span></p>
-      <p style="grid-column: span 2;">
-        <strong>Última alteração:</strong>
-        <span id="detalhe-ultima-alt">---</span>
-      </p>
-    </div>
-
-    <hr>
-
-    <div class="painel-acoes">
-      <button id="btn-designar" onclick="acaoDesignar()">📋 Designar</button>
-      <button id="btn-trabalhar" onclick="alterarStatus('Trabalhando')">🚶 Em Campo</button>
-      <button id="btn-concluir" onclick="alterarStatus('Concluído')">✅ Concluir</button>
-      <button id="btn-liberar" onclick="alterarStatus('Livre')">🔄 Liberar</button>
-    </div>
-
-    <div class="painel-acoes-secundarias">
-      <button id="btn-capturar-coord" onclick="capturarCoordenadaGPS()">📍 Capturar GPS</button>
-      <button id="btn-rota-coord" onclick="tracarRotaAteCoordenada()" disabled>🚗 Rota</button>
-      <button id="btn-limpar-coord" onclick="limparCoordenada()" style="display:none;">🗑️</button>
-    </div>
-
-    <div class="painel-acoes-secundarias">
-      <button id="btn-add-ponto" onclick="alternarModoMarcacao()">📍 Anotação</button>
-      <button onclick="editarPoligonoAtivo()">✏️ Editar forma</button>
-      <button onclick="abrirHistoricoTerritorio()">📜 Histórico</button>
-    </div>
-
-    <div class="painel-acoes-secundarias">
-      <button onclick="moverCongregacao()" style="background:#FF9800;">🔀 Mover congregação</button>
-      <button onclick="excluirTerritorioAtivo()" style="background:#c62828;">🗑️ Excluir território</button>
-    </div>
-
-    <div id="secao-pontos" class="secao-pontos">
-      <h4>Anotações dentro do Território</h4>
-      <ul id="lista-pontos"></ul>
-    </div>
-  </div>
-
-  <div id="painel-admin" class="painel oculto">
+  <!-- ═══════════ PAINEL ADMIN ═══════════ -->
+  <div id="painel-admin" class="painel-admin oculto">
     <button class="btn-fechar" onclick="fecharPainelAdmin()">✕</button>
-    <h2 style="margin-bottom:12px;">⚙️ Ferramentas de Gestão</h2>
+    <h2>⚙️ Ferramentas</h2>
     <div class="admin-lista">
       <button onclick="iniciarNovoTerritorio()" class="btn-admin">
-        ➕ <strong>Novo Território</strong><br>
-        <small>Desenhe um polígono novo no mapa</small>
+        ➕ <strong>Novo Território</strong><br><small>Desenhe um polígono</small>
       </button>
       <button onclick="importarKML()" class="btn-admin">
-        📥 <strong>Importar KML</strong><br>
-        <small>Adicionar território exportado do Google My Maps</small>
+        📥 <strong>Importar KML</strong><br><small>Google My Maps</small>
       </button>
       <button onclick="importarGeojsonManual()" class="btn-admin">
-        📥 <strong>Importar GeoJSON</strong><br>
-        <small>Enviar arquivo .geojson ou .json</small>
+        📥 <strong>Importar GeoJSON</strong><br><small>Arquivo .geojson</small>
       </button>
       <button onclick="abrirHistoricoGlobal()" class="btn-admin">
-        📜 <strong>Histórico geral</strong><br>
-        <small>Últimas 100 alterações do sistema</small>
+        📜 <strong>Histórico geral</strong>
       </button>
       <button onclick="estatisticasCongregacoes()" class="btn-admin">
-        📊 <strong>Estatísticas</strong><br>
-        <small>Resumo por congregação e status</small>
+        📊 <strong>Estatísticas</strong>
       </button>
       <button onclick="recarregarTudo()" class="btn-admin">
-        🔄 <strong>Recarregar dados</strong><br>
-        <small>Força atualização do Firestore</small>
+        🔄 <strong>Recarregar dados</strong>
       </button>
     </div>
   </div>
 
+  <!-- ═══════════ MODAIS ═══════════ -->
   <div id="modal-historico" class="modal oculto">
     <div class="modal-conteudo">
       <button class="btn-fechar" onclick="fecharHistorico()">✕</button>
@@ -151,7 +182,7 @@
   <div id="modal-stats" class="modal oculto">
     <div class="modal-conteudo">
       <button class="btn-fechar" onclick="fecharStats()">✕</button>
-      <h3>📊 Estatísticas por Congregação</h3>
+      <h3>📊 Estatísticas</h3>
       <div id="stats-conteudo"></div>
     </div>
   </div>
@@ -160,5 +191,4 @@
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
   <script src="app.js"></script>
 </body>
-
 </html>

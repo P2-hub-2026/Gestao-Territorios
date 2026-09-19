@@ -287,6 +287,9 @@ function atualizarPainelComDadosAtuais() {
   atualizarInterfaceCoordenada();
   atualizarListaPontosDOM();
   destacarCoordenadaAtiva();
+
+  // ✅ NOVO: atualiza o chip também
+  atualizarChip(it);
 }
 
 function fecharPainel() {
